@@ -13,12 +13,13 @@
 trigger ActividadesPlexus_tgr on Actividades_Plexus__c (after insert, after update, before update) {
     
     if(Trigger.isAfter){
-             //set para almacenar Id de las actividades    
+             //Set para almacenar Id de las actividades    
             Set<Id> IdActividad = new Set<Id>();    
             Set<Id> IdActCaso = new Set<Id>();
             Set<Id> IdActCierre = new Set<Id>();
-             Set<Id> IdActCierreACT = new Set<Id>();
+            Set<Id> IdActCierreACT = new Set<Id>();
             Set<Id> AsignaPrioridad = new Set<Id>();
+            Set<Id> AsignaPrioridadCC = new Set<Id>();
             Set<Id> ActividadesDup = new Set<Id>();
             Set<Id> ActDupResuelta = new Set<Id>();
             Set<Id> copiarDescripcion = new Set<Id>();
@@ -29,10 +30,13 @@ trigger ActividadesPlexus_tgr on Actividades_Plexus__c (after insert, after upda
        if(trigger.isInsert){
                 //Obtenemos las actividades a gestioanr
                 for(Actividades_Plexus__c actividad : Trigger.new){
+                    if(actividad.TipoRegistro__c == 'Plexus' || actividad.TipoRegistro__c == 'Color Center'){
                         IdActividad.add(actividad.Id);
                         //Obtenemos los casos de las actividades
                         IdActCaso.add(actividad.Numero_de_Caso__c);
                         copiarDescripcion.add(actividad.Id);
+                    }
+                    if(actividad.TipoRegistro__c == 'Plexus'){
                         //Obtenemos todas las actividades en las que cambio su tipo de problema
                         if(actividad.TipoProblema__c != null ){
                             if(actividad.ACTCOD__c == true){
@@ -52,8 +56,11 @@ trigger ActividadesPlexus_tgr on Actividades_Plexus__c (after insert, after upda
                             reincidenciaAct.add(actividad.Actividades_Reabiartas__c);
                         } 
                         */
-                        
                     }
+                    if(actividad.TipoRegistro__c == 'Color Center'){
+                            AsignaPrioridadCC.add(actividad.Id);
+                    }
+                }// for Trigger.New
                     if(ActividadesDup.size()>0){
                     List<Actividades_Plexus__c> actUpdate = new List<Actividades_Plexus__c>();
                     List<Actividades_Plexus__c> actDup = new List<Actividades_Plexus__c>([Select id, createdDate, Estatus__c, FechaHoraCierre__c from Actividades_Plexus__c where id =: ActividadesDup ]);
@@ -76,7 +83,7 @@ trigger ActividadesPlexus_tgr on Actividades_Plexus__c (after insert, after upda
                         }
                     }
                     /*
-                    //Si se esta capturando una actividad que es reincidente evaluamos si el caso esta en etapa Cerrado y si es asi lo cambiamos a Reincidencia
+/*                     //Si se esta capturando una actividad que es reincidente evaluamos si el caso esta en etapa Cerrado y si es asi lo cambiamos a Reincidencia
                     if(reincidencias.size()>0){
                             List<Case> actualizaReincidencia = new List<Case>();
                             List<Case> casoCerrado = new List<Case>([select id, status from Case where Id =: reincidencias]);
@@ -97,13 +104,20 @@ trigger ActividadesPlexus_tgr on Actividades_Plexus__c (after insert, after upda
                             }
                         }
                         */
-                    //Cambiamos la etapa del caso en cuanto se haya generado una nueva actividad
+                    //Cambiamos la etapa del caso en cuanto se haya generado una nueva actividad */
                     if(IdActCaso.size()>0){
+            list<Case> lActividad = [SELECT Id, RecordType.Name FROM Case WHERE Id =: IdActCaso];
+                        System.debug(logginglevel.INFO,'@@lActividad: '+lActividad.size());
+            String tipoRegistro = null;
+            if(lActividad.size() > 0){
+              tipoRegistro = lActividad.get(0).RecordType.Name;
+                            System.debug(logginglevel.INFO,'@@tipoRegistro '+tipoRegistro);
+            }
                         //system.assert(null,'Error'+IdActCaso);
                         List<Case> casos = new List<Case>([select Id,NoTienda__c, status, TramoDescripcion__c, Resuelto__c from Case where Id =: IdActCaso and status IN('Abierto','Escalado','Reincidencia')]);
                         List<Case> casosUpdate = new List<Case>();
                         List<Actividades_Plexus__c> actividadD = new List<Actividades_Plexus__c>();
-                        
+                        //Validamos si el caso es diferente a Reincidencia lo pasamos a Escalado
                             if(casos.size()>0){
                                     for(Case c : casos){
                                         if(c.status != 'Reincidencia'){
@@ -114,7 +128,8 @@ trigger ActividadesPlexus_tgr on Actividades_Plexus__c (after insert, after upda
                                         }
                                         casosUpdate.add(c);
                                     }if(casosUpdate.size()>0){update casosUpdate;}
-                             }else{
+                             }else if(tipoRegistro != 'Color Center'){
+                System.debug(logginglevel.INFO,'@@2tipoRegistro '+tipoRegistro); 
                                 system.assertEquals(null,'NO ES POSIBLE CREAR ACTIVIDADES DE UN CASO CERRADO');
                              }
                              if(copiarDescripcion.size()>0){
@@ -130,13 +145,22 @@ trigger ActividadesPlexus_tgr on Actividades_Plexus__c (after insert, after upda
                                     }
                                 }if(actividadD.size()>0){update actividadD;} 
                              }
-                    }
+                    }//fin if(IdActCaso.size()>0)
                     //Asignamos la prioridad dependiendo el problema que se haya seleccionado
                     if(AsignaPrioridad.size()>0){
                         try{
                         ActividadAsignaPrioridad aPact = new ActividadAsignaPrioridad();
                         aPact.asignaPrioridadAct(AsignaPrioridad);
                         }catch(Exception e){system.debug('Error'+e.getmessage());}
+                    }
+                    if(AsignaPrioridadCC.size()>0){
+                        try{
+                        ActividadAsignaPrioridad aPact = new ActividadAsignaPrioridad();
+                        aPact.asignaPrioridadActCC(AsignaPrioridadCC);
+                        }catch(Exception e){system.debug('Error'+e.getmessage());}
+
+                        CreaTiempoCC creaTiempoAct = new CreaTiempoCC();
+                            creaTiempoAct.creaTiempoCCAct(AsignaPrioridadCC);
                     }
                     //Asigamos el Horario correspondiente a su prioridad clasificación y área
                     if(IdActividad.size()>0){
@@ -145,79 +169,97 @@ trigger ActividadesPlexus_tgr on Actividades_Plexus__c (after insert, after upda
                             eCalculo.calcular(IdActividad);
                     } 
                     
-        }
+        }//fin Insert
         if(trigger.isUpdate){
-            set<Id> reincidenciaCaso = new set<Id>(); 
-            set<Id> reincidenciaActividad = new set<Id>();
-            set<Id> ReincidenciaC = new set<Id>();
-            set<Id> ReincidenciaCierre = new set<Id>();
+            Set<Id> reincidenciaCaso = new Set<Id>(); 
+            Set<Id> reincidenciaActividad = new Set<Id>();
+            Set<Id> ReincidenciaC = new Set<Id>();
+            Set<Id> ReincidenciaCierre = new Set<Id>();
+            Set<Id> cerrarTiempo = new Set<Id>();
+            Set<Id> crearTiempo = new Set<Id>();
             String usuarioPerfil = [select Name from Profile where Id=:userinfo.getProfileId() limit 1].Name;
                 //Almacenamos actividades donde les cambia el area
                 for(Actividades_Plexus__c oCaseNew : Trigger.new){
-                    
+                    if(oCaseNew.TipoRegistro__c == 'Plexus' || oCaseNew.TipoRegistro__c == 'Color Center'){
                         if(oCaseNew.area__c != Trigger.oldMap.get(oCaseNew.Id).area__c){
                                 IdActividad.add(OCaseNew.Id);
-                        }  
+                        }
                         //Obtenemos actividades cuando el estatus de la actividad se modifique
                         if(oCaseNew.Estatus__c != Trigger.oldMap.get(oCaseNew.Id).Estatus__c){
-                                IdActCierre.add(oCaseNew.Numero_de_Caso__c);
-                                IdActCierreACT.add(oCaseNew.Id);
-                                /*if(oCaseNew.Reincidencia__c ==  true && oCaseNew.Estatus__c == 'Resuelto' ){
-                                    //reincidenciaCaso.add(oCaseNew.Numero_de_Caso__c);
-                                    reincidenciaActividad.add(oCaseNew.Actividades_Reabiartas__c);
-                                }*/
-                                //Si un caso pasa de Etapa Cerrado a Reincidencia se crear un registro en historico para llevar el conteo de tiempo reincidente
-                                if(oCaseNew.Estatus__c=='Reincidencia' && (Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Resuelto' || Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Rechazado')){
-                                    ReincidenciaC.add(OCaseNew.Id);
-                                    reincidenciaCaso.add(oCaseNew.Numero_de_Caso__c);
+                            IdActCierre.add(oCaseNew.Numero_de_Caso__c);
+                            IdActCierreACT.add(oCaseNew.Id);
+                            /*if(oCaseNew.Reincidencia__c ==  true && oCaseNew.Estatus__c == 'Resuelto' ){
+                                //reincidenciaCaso.add(oCaseNew.Numero_de_Caso__c);
+                                reincidenciaActividad.add(oCaseNew.Actividades_Reabiartas__c);
+                            }*/
+                            //Si un caso pasa de Etapa Cerrado a Reincidencia se crear un registro en historico para llevar el conteo de tiempo reincidente
+                            if(oCaseNew.Estatus__c=='Reincidencia' && (Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Resuelto' || Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Rechazado')){
+                                ReincidenciaC.add(OCaseNew.Id);
+                                reincidenciaCaso.add(oCaseNew.Numero_de_Caso__c);
+                            }
+                            //Si la Etapa pasa de Reincidencia a Resuelto en el campo de fecha de cierre lo llenamos con la fecha actual obtenida desde el sistema
+                            else if(oCaseNew.Estatus__c=='Resuelto' && (Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Reincidencia' || Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Rechazado')){
+                                ReincidenciaCierre.add(OCaseNew.Id);
+                            }
+                            else if(oCaseNew.Estatus__c=='Reincidencia' && (Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Asignado' || Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'En proceso' || Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'En refaccion')){
+                                if(usuarioPerfil.equals('Agente plexus') || usuarioPerfil.equals('Agente Plexus Soporte') || usuarioPerfil.equals('Admin Plexus Soporte') || usuarioPerfil.equals('Agente Plexus Artículos Knowledge')){
+                                    oCaseNew.addError(' ¡Cambio de estatus incorrecto!');
                                 }
-                                //Si la Etapa pasa de Reincidencia a Cerrado en el campo de fecha de cierre lo llenamos con la fecha actual obtenida desde el sistema
-                                else if(oCaseNew.Estatus__c=='Resuelto' && (Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Reincidencia' || Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Rechazado' || Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'En proceso')){
-                                    ReincidenciaCierre.add(OCaseNew.Id);
+                            }
+                             else if((oCaseNew.Estatus__c=='Asignado' || oCaseNew.Estatus__c=='En proceso') && (Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Reincidencia' || Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Resuelto' || Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Rechazado')){
+                                if(usuarioPerfil.equals('Agente plexus')|| usuarioPerfil.equals('Agente Plexus Soporte') || usuarioPerfil.equals('Admin Plexus Soporte') || usuarioPerfil.equals('Agente Plexus Artículos Knowledge')){
+                                    oCaseNew.addError(' ¡Cambio de estatus incorrecto!');
                                 }
-                                else if(oCaseNew.Estatus__c=='Reincidencia' && (Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Asignado' || Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'En proceso')){
-                                    if(usuarioPerfil.equals('Agente plexus') || usuarioPerfil.equals('Agente Plexus Soporte') || usuarioPerfil.equals('Admin Plexus Soporte') || usuarioPerfil.equals('Agente Plexus Artículos Knowledge')){
-                                        oCaseNew.addError(' ¡Cambio de estatus incorrecto!');
-                                    }
+                            }else if(oCaseNew.Estatus__c=='Rechazado' && Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Resuelto'){
+                                if(usuarioPerfil.equals('Agente plexus')|| usuarioPerfil.equals('Agente Plexus Soporte') || usuarioPerfil.equals('Admin Plexus Soporte') || usuarioPerfil.equals('Agente Plexus Artículos Knowledge')){
+                                    oCaseNew.addError(' ¡Cambio de estatus incorrecto!');
                                 }
-                                else if((oCaseNew.Estatus__c=='Asignado' || oCaseNew.Estatus__c=='En proceso') && (Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Reincidencia' || Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Resuelto' || Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Rechazado')){
-                                    if(usuarioPerfil.equals('Agente plexus')|| usuarioPerfil.equals('Agente Plexus Soporte') || usuarioPerfil.equals('Admin Plexus Soporte') || usuarioPerfil.equals('Agente Plexus Artículos Knowledge')){
-                                        oCaseNew.addError(' ¡Cambio de estatus incorrecto!');
-                                    }
-                                }else if(oCaseNew.Estatus__c=='Rechazado' && Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Resuelto'){
-                                        if(usuarioPerfil.equals('Agente plexus')|| usuarioPerfil.equals('Agente Plexus Soporte') || usuarioPerfil.equals('Admin Plexus Soporte') || usuarioPerfil.equals('Agente Plexus Artículos Knowledge')){
-                                        oCaseNew.addError(' ¡Cambio de estatus incorrecto!');
-                                    }
+                            }else if (oCaseNew.Estatus__c=='Resuelto' && Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'En refaccion'){
+                                if(usuarioPerfil.equals('Agente plexus') || usuarioPerfil.equals('Agente Plexus Soporte') || usuarioPerfil.equals('Admin Plexus Soporte') || usuarioPerfil.equals('Agente Plexus Artículos Knowledge')){
+                                    oCaseNew.addError(' ¡Cambio de estatus incorrecto!');
                                 }
-                        }
-                        //Obtenemos las actividades cuando el tipo de problema se modifique
-                        if(oCaseNew.TipoProblema__c != Trigger.oldMap.get(oCaseNew.Id).TipoProblema__c){ 
-                                    AsignaPrioridad.add(oCaseNew.Id);
-                         }
+                            }
+                        }//fin if(oCaseNew.Estatus__c != Trigger.oldMap.get(oCaseNew.Id).Estatus__c)
                         if(oCaseNew.Estatus__c=='Resuelto'){
                             if(oCaseNew.ACTCOD__c == true){
-                                        system.debug('Actividad creada por codigo');
-                                }else{
-                                    if(usuarioPerfil.equals('Agente plexus')|| usuarioPerfil.equals('Agente Plexus Soporte')
+                                system.debug('Actividad creada por codigo');
+                            }else{
+                                if(usuarioPerfil.equals('Agente plexus')|| usuarioPerfil.equals('Agente Plexus Soporte')
                                      || usuarioPerfil.equals('Admin Plexus Soporte') || usuarioPerfil.equals('Agente Plexus Artículos Knowledge')
                                      || usuarioPerfil.equals('Admin Plexus')){
-                                       if(oCaseNew.CreacionAutomaticaCL__c != Trigger.oldMap.get(oCaseNew.Id).CreacionAutomaticaCL__c ||
-                                         oCaseNew.FechaHoraCierre__c != Trigger.oldMap.get(oCaseNew.Id).FechaHoraCierre__c
-                                         || oCaseNew.Tramo_de_descripcion_del__c != Trigger.oldMap.get(oCaseNew.Id).Tramo_de_descripcion_del__c 
-                                         || (oCaseNew.Estatus__c=='Resuelto' && Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Reincidencia')
-                                         || (oCaseNew.Estatus__c=='Resuelto' && Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Rechazado')
-                                         || (oCaseNew.Estatus__c=='Resuelto' && Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'En proceso')){
-                                            system.debug('Cambio de fecha cierre o creación de checklist');
-                                        }else{
-                                                oCaseNew.addError('Registro Bloqueado');
-                                        }
+                                    if(oCaseNew.CreacionAutomaticaCL__c != Trigger.oldMap.get(oCaseNew.Id).CreacionAutomaticaCL__c ||
+                                             oCaseNew.FechaHoraCierre__c != Trigger.oldMap.get(oCaseNew.Id).FechaHoraCierre__c
+                                             || oCaseNew.Tramo_de_descripcion_del__c != Trigger.oldMap.get(oCaseNew.Id).Tramo_de_descripcion_del__c 
+                                             || (oCaseNew.Estatus__c=='Resuelto' && Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Reincidencia')
+                                             || (oCaseNew.Estatus__c=='Resuelto' && Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'Rechazado')
+                                             || (oCaseNew.Estatus__c=='Resuelto' && Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'En proceso')){
+                                                system.debug('Cambio de fecha cierre o creación de checklist');
+                                    }else{
+                                        oCaseNew.addError('Registro Bloqueado');
                                     }
                                 }
-                            
+                            }
+                        }//fin if(oCaseNew.Estatus__c=='Resuelto')
+                    }
+                    if(oCaseNew.TipoRegistro__c == 'Plexus'){
+                        //Obtenemos las actividades cuando el tipo de problema se modifique
+                        if(oCaseNew.TipoProblema__c != Trigger.oldMap.get(oCaseNew.Id).TipoProblema__c){ 
+                            AsignaPrioridad.add(oCaseNew.Id);
                         }
-                            
-                 }
-                 if(ReincidenciaC.size()>0){
+                    }// fin if(oCaseNew.TipoRegistro__c == 'Plexus')
+                    if(oCaseNew.TipoRegistro__c == 'Color Center'){
+                        if(oCaseNew.TipoProblema__c != Trigger.oldMap.get(oCaseNew.Id).TipoProblema__c){ 
+                            AsignaPrioridadCC.add(oCaseNew.Id);
+                        }
+                        if(oCaseNew.Estatus__c=='Resuelto' && Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'En proceso'){
+                            cerrarTiempo.add(oCaseNew.Id);
+                        }
+                        if((oCaseNew.Estatus__c=='En refaccion' && Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'En proceso') || (oCaseNew.Estatus__c=='En proceso' && Trigger.oldMap.get(oCaseNew.Id).Estatus__c == 'En refaccion')){
+                            crearTiempo.add(oCaseNew.Id);
+                        }
+                    }
+                }// fin trigger.new
+                if(ReincidenciaC.size()>0){
                         List<Case> casoP = new List<Case>([select Id, Status from Case where id =: reincidenciaCaso]);
                         List<Case> casoUpdate = new List<Case>();
                         if(casoP.size()>0){
@@ -239,24 +281,32 @@ trigger ActividadesPlexus_tgr on Actividades_Plexus__c (after insert, after upda
                             }if(nuevoHistorico.size()>0){insert nuevoHistorico;}
                         }
                         
+                }
+                if(ReincidenciaCierre.size()>0){
+                    List<Historico_Reincidencia__c> historico = new List<Historico_Reincidencia__c>([select id, FechaHoraCierre__c from Historico_Reincidencia__c where Actividad__c=: ReincidenciaCierre and FechaHoraCierre__c =: null]);
+                    List<Historico_Reincidencia__c> actualizaHistorico = new List<Historico_Reincidencia__c>();
+                    if(historico.size()>0){
+                        for(Historico_Reincidencia__c fechaCierre : historico){
+                            fechaCierre.FechaHoraCierre__c = Datetime.Now();
+                            actualizaHistorico.add(fechaCierre);
+                        }if(actualizaHistorico.size()>0){update actualizaHistorico;}
                     }
-                    if(ReincidenciaCierre.size()>0){
-                        List<Historico_Reincidencia__c> historico = new List<Historico_Reincidencia__c>([select id, FechaHoraCierre__c from Historico_Reincidencia__c where Actividad__c=: ReincidenciaCierre and FechaHoraCierre__c =: null]);
-                        List<Historico_Reincidencia__c> actualizaHistorico = new List<Historico_Reincidencia__c>();
-                        if(historico.size()>0){
-                            for(Historico_Reincidencia__c fechaCierre : historico){
-                                fechaCierre.FechaHoraCierre__c = Datetime.Now();
-                                actualizaHistorico.add(fechaCierre);
-                            }if(actualizaHistorico.size()>0){update actualizaHistorico;}
-                        }
-                    }
+                }
                 //Mandamos a llamar a la clase para asignar la prioridad correspondiente
                 if(AsignaPrioridad.size()>0){
-                        ActividadAsignaPrioridad aPact = new ActividadAsignaPrioridad();
-                        aPact.asignaPrioridadAct(AsignaPrioridad);
-                        Horarios_Plexus_Actividades eCalculo = new Horarios_Plexus_Actividades();
-                        eCalculo.calcular(AsignaPrioridad);
-                    }
+                    ActividadAsignaPrioridad aPact = new ActividadAsignaPrioridad();
+                    aPact.asignaPrioridadAct(AsignaPrioridad);
+                    Horarios_Plexus_Actividades eCalculo = new Horarios_Plexus_Actividades();
+                    eCalculo.calcular(AsignaPrioridad);
+                }
+                //Mandamos a llamar a la clase para asignar la prioridad correspondiente
+                if(AsignaPrioridadCC.size()>0){
+                    ActividadAsignaPrioridad aPact = new ActividadAsignaPrioridad();
+                    aPact.asignaPrioridadActCC(AsignaPrioridadCC);
+                    
+                    Horarios_Plexus_Actividades eCalculo = new Horarios_Plexus_Actividades();
+                    eCalculo.calcular(AsignaPrioridadCC);
+                }
                 //Proceso el cual si todas las actividades del caso estan en estatus "Resuelto" o "Rechazado" se avisa al caso
                 if(IdActCierre.size()>0){
                         Map<Id,Case> casos = new Map<Id,Case>([select Id, Resuelto__c from Case where Id =: IdActCierre]);
@@ -267,40 +317,40 @@ trigger ActividadesPlexus_tgr on Actividades_Plexus__c (after insert, after upda
                         List<Case> casosCerrados = new List<Case>();
                         Set<Id> cerrarCasos = new Set<Id>();     
                         //system.assertEquals(null,'Error tst///'+act);                                                               
-                            for(Id c : casos.keyset()){
+                            for(Id c : casos.keySet()){
                                 for(Actividades_Plexus__c a: act){
-                                    if(c == a.Numero_de_Caso__c && (a.Estatus__c=='Asignado' || a.Estatus__c=='En proceso' || a.Estatus__c=='Reincidencia')){
+                                    if(c == a.Numero_de_Caso__c && (a.Estatus__c=='Asignado' || a.Estatus__c=='En proceso' || a.Estatus__c=='Reincidencia' || a.Estatus__c=='En refaccion')){
                                         casosAbiertos.put(c, a.Estatus__c);
                                         casosCerrados.add(casos.get(c));
                                     }
                                 }
                             }
-                            for(Id ca : casosAbiertos.keyset()){
+                            for(Id ca : casosAbiertos.keySet()){
                                 if(casos.containsKey(ca)){casos.remove(ca); }
                             }   
-                            for(Id po : casos.keyset()){
+                            for(Id po : casos.keySet()){
                                 casos.get(po).Resuelto__c = true; 
                             }   
                         update casos.values();  
                         if(casosCerrados.size()>0){for(Case cd: casosCerrados){cd.Resuelto__c = false;} try{update casosCerrados;}catch(Exception e){System.debug(':::Error actividades'+e.getMessage());}}
                                                              
-                    }
-                    if(IdActCierreACT.size()>0){
-                        List<Actividades_Plexus__c> act = new List<Actividades_Plexus__c>([select id, CreatedDate, Numero_de_Caso__c,Estatus__c, FechaHoraCierre__c, LastModifiedDate from Actividades_Plexus__c 
+                }
+                if(IdActCierreACT.size()>0){
+                    List<Actividades_Plexus__c> act = new List<Actividades_Plexus__c>([select id, CreatedDate, Numero_de_Caso__c,Estatus__c, FechaHoraCierre__c, LastModifiedDate from Actividades_Plexus__c 
                                                                                             where Id =: IdActCierreACT]);
-                           for(Actividades_Plexus__c actividad: act){
-                            if(actividad.Estatus__c == 'Resuelto' || actividad.Estatus__c == 'Rechazado'){
-                                actividad.FechaHoraCierre__c = actividad.LastModifiedDate;
-                                //DateTime dt = DateTime.parse('11/08/2017 05:14 AM');
-                                //actividad.FechaHoraCierre__c = dt;
-                                if(actividad.FechaHoraCierre__c < actividad.createdDate){system.assertEquals(null,'Error MORTAL contacte a su Administrador:'+actividad.FechaHoraCierre__c+' < '+actividad.createdDate);}
+                    for(Actividades_Plexus__c actividad: act){
+                        if(actividad.Estatus__c == 'Resuelto' || actividad.Estatus__c == 'Rechazado'){
+                            actividad.FechaHoraCierre__c = actividad.LastModifiedDate;
+                            //DateTime dt = DateTime.parse('11/08/2017 05:14 AM');
+                            //actividad.FechaHoraCierre__c = dt;
+                            if(actividad.FechaHoraCierre__c < actividad.createdDate){system.assertEquals(null,'Error MORTAL contacte a su Administrador:'+actividad.FechaHoraCierre__c+' < '+actividad.createdDate);}
                                 actFechaFin.add(actividad);
-                            }else{
-                                actividad.FechaHoraCierre__c = null;
-                                actFechaFin.add(actividad);
-                            }  
-                        }if(actFechaFin.size()>0){update actFechaFin;} 
-                    }
+                        }else{
+                            actividad.FechaHoraCierre__c = null;
+                            actFechaFin.add(actividad);
+                        }  
+                    }if(actFechaFin.size()>0){update actFechaFin;} 
+                }
                     /*//Actualizamos el estatus de la Actividad y del Caso a Cerrrado
                     if(reincidenciaActividad.size()>0){
                     List<Actividades_Plexus__c>  updateact = new List<Actividades_Plexus__c>();
@@ -330,6 +380,15 @@ trigger ActividadesPlexus_tgr on Actividades_Plexus__c (after insert, after upda
                 if(IdActividad.size()>0){
                     Horarios_Plexus_Actividades eCalculo = new Horarios_Plexus_Actividades();
                         eCalculo.calcular(IdActividad);
+                }
+                if(cerrarTiempo.size()>0){
+                    CreaTiempoCC creaTiempo = new CreaTiempoCC();
+                    creaTiempo.cerrarTiempoAct(cerrarTiempo);
+                }
+                if(crearTiempo.size()>0){
+                    CreaTiempoCC cierraTiempo = new CreaTiempoCC();
+                    cierraTiempo.creaTiempoCCAct(crearTiempo);
+                    cierraTiempo.cerrarTiempoAct(crearTiempo);
                 }
           }
       }
