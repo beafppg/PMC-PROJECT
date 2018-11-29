@@ -15,35 +15,71 @@
 *********************************************************************************/
 public with sharing class ActividadAsignaPrioridad {
     Set<Id> AsignaPrioridad = new Set<Id>();
-    
     public void asignaPrioridadAct(Set<Id> AsignaPrioridad){
         //Asignacion y declaración de variables
-            this.AsignaPrioridad= AsignaPrioridad;
-            List<Actividades_Plexus__c>  actualizaPrioridad     = new List<Actividades_Plexus__c>();
-            List<Actividades_Plexus__c>  actividades                = new List<Actividades_Plexus__c>();
-            List<Tipos_de_problema__c> problemas                = new List<Tipos_de_problema__c>();
+        this.AsignaPrioridad= AsignaPrioridad;
+        List<Actividades_Plexus__c>  actualizaPrioridad = new List<Actividades_Plexus__c>();
+        List<Actividades_Plexus__c>  actividades        = new List<Actividades_Plexus__c>();
+        List<Tipos_de_problema__c>   problemas          = new List<Tipos_de_problema__c>();
         //Creación de consultas cuando se ejecute por clases de test
-            if(Test.isRunningTest()){
-                actividades = ([select Id, TipoProblema__c, Clasificacion_Actividad__c, Prioridad_actividad__c, POS__c from Actividades_Plexus__c where Id=:AsignaPrioridad]);
-                problemas  = ([select Id, Tipo_de_problema__c, Categoria__c, Prioridad__c, POS__c from Tipos_de_problema__c]);
-            }else{
-                actividades = ([select Id, TipoProblema__c, Clasificacion_Actividad__c, Prioridad_actividad__c, POS__c from Actividades_Plexus__c where Id=:AsignaPrioridad]);
-                problemas  = ([select Id, Tipo_de_problema__c, Categoria__c, Prioridad__c, POS__c from Tipos_de_problema__c]);
+        if(Test.isRunningTest()){
+            actividades = ([select Id, TipoProblema__c, Clasificacion_Actividad__c, Prioridad_actividad__c, POS__c from Actividades_Plexus__c where Id=:AsignaPrioridad]);
+            problemas   = ([select Id, Tipo_de_problema__c, Categoria__c, Prioridad__c, POS__c from Tipos_de_problema__c]);
+        }else{
+            actividades = ([select Id, TipoProblema__c, Clasificacion_Actividad__c, Prioridad_actividad__c, POS__c from Actividades_Plexus__c where Id=:AsignaPrioridad]);
+            problemas   = ([select Id, Tipo_de_problema__c, Categoria__c, Prioridad__c, POS__c from Tipos_de_problema__c]);
+        }
+        //Se realiza la asignacion de prioridad y Clasificacion, Se valida que el tipo de problema correspanda al POS de la actividad           
+        if(actividades.size()>0){
+            for(Actividades_Plexus__c ac : actividades){
+                for(Tipos_de_problema__c tp : problemas){
+                    if(ac.TipoProblema__c == tp.Id){
+                    //Se modifica mensaje de error (APM)
+                        if(ac.POS__C != tp.POS__c){System.assertEquals(null,'--EL TIPO DE PROBLEMA NO CORRESPONDE AL SISTEMA DEL POS DE LA TIENDA--');}
+                        else{
+                            ac.Prioridad_actividad__c = tp.Prioridad__c;
+                            ac.Clasificacion_Actividad__c = tp.Categoria__c;
+                            actualizaPrioridad.add(ac);
+                        }
+                    }
+                }
             }
-            //Se realiza la asignacion de prioridad y Clasificacion, Se valida que el tipo de problema correspanda al POS de la actividad           
-                        if(actividades.size()>0){
-                            for(Actividades_Plexus__c ac : actividades){
-                                for(Tipos_de_problema__c tp : problemas){
-                                    if(ac.TipoProblema__c == tp.Id){
-                                        if(ac.POS__C != tp.POS__c){System.assertEquals(null,'--EL TIPO DE PROBLEMA NO CORRESPONDE AL SISTEMA DEL POS DE LA TIENDA--');}
-                                        else{
-                                            ac.Prioridad_actividad__c = tp.Prioridad__c;
-                                            ac.Clasificacion_Actividad__c = tp.Categoria__c;
-                                            actualizaPrioridad.add(ac);
-                                        }
-                                    }
-                                }
-                            }if(actualizaPrioridad.size()>0){update actualizaPrioridad;}
-                        }           
-    }
-}
+            //se actualizan las actividaeds con prioridad y un tipo de problema
+            if(actualizaPrioridad.size()>0){update actualizaPrioridad;}
+        }// fin if(actividades.size()>0)        
+    }// fin metoso asignaPrioridadAct
+    public void asignaPrioridadActCC(Set<Id> AsignaPrioridad){
+        //Asignacion y declaración de variables
+        this.AsignaPrioridad= AsignaPrioridad;
+        List<Actividades_Plexus__c>  actualizaPrioridad = new List<Actividades_Plexus__c>();
+        List<Actividades_Plexus__c>  actividades        = new List<Actividades_Plexus__c>();
+        List<Tipos_de_problema__c>   problemas          = new List<Tipos_de_problema__c>();
+        //Creación de consultas cuando se ejecute por clases de test
+        if(Test.isRunningTest()){
+            actividades = ([select Id, TipoProblema__c, Clasificacion_Actividad__c, Prioridad_actividad__c, POS__c, TipoRegistro__c from Actividades_Plexus__c where Id=:AsignaPrioridad]);
+            problemas   = ([select Id, Tipo_de_problema__c, Categoria__c, Prioridad__c, POS__c, Area__c from Tipos_de_problema__c]);
+        }else{
+            actividades = ([select Id, TipoProblema__c, Clasificacion_Actividad__c, Prioridad_actividad__c, POS__c, TipoRegistro__c from Actividades_Plexus__c where Id=:AsignaPrioridad]);
+            problemas   = ([select Id, Tipo_de_problema__c, Categoria__c, Prioridad__c, POS__c, Area__c from Tipos_de_problema__c]);
+        }
+        //Se realiza la asignacion de prioridad y Clasificacion, Se valida que el tipo de problema correspanda al POS de la actividad           
+        if(actividades.size()>0){
+            for(Actividades_Plexus__c ac : actividades){
+                for(Tipos_de_problema__c tp : problemas){
+                    if(ac.TipoProblema__c == tp.Id){
+                        if(ac.TipoRegistro__c != tp.Area__c){
+                            System.assertEquals(null,'--EL TIPO DE PROBLEMA NO CORRESPONDE AL SISTEMA COLOR CENTER--');
+                        }else{
+                            //System.assertEquals(null,'--asignar prioridad--');
+                            ac.Prioridad_actividad__c = tp.Prioridad__c;
+                            ac.Clasificacion_Actividad__c = tp.Categoria__c;
+                            actualizaPrioridad.add(ac);
+                        }
+                    }
+                }
+            }
+            //se actualizan las actividaeds con prioridad y un tipo de problema
+            if(actualizaPrioridad.size()>0){update actualizaPrioridad;}
+        }// fin if(actividades.size()>0)        
+    }// fin metoso asignaPrioridadActCC
+}// fin de clase
