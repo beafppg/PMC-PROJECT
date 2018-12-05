@@ -8,139 +8,70 @@
 *   -------------------------------------------------------------------------- 
 *   No.     Fecha               Autor                   Descripción            
 *   ------  ----------  ----------------------      --------------------------- 
-*   1.0     30-11-2016   Eduardo Godinez Loza(EGL)        Creación Clase         
-*   2.0     21-02-2017   Eduardo Godinez Loza(EGL)        Modificación Clase     
-*   2.1     25-05-2017   Eduardo Godinez Loza(EGL)        Se agrega filtro POS para    
-*   2.2     31-07-2017   Alejandro Paulino Martinez(APM)  Se mejora la clase! >_<                                                                                         seleccion de horario y tipo de problema       
+*   1.0      30-11-2016   Eduardo Godinez Loza(EGL)       Creación Clase         
+*   2.0     21-02-2017   Eduardo Godinez Loza(EGL)       Modificación Clase     
+*   2.1   25-05-2017   Eduardo Godinez Loza(EGL)        Se agrega filtro POS para    
+*   2.2   31-07-2017  Alejandro Paulino Martinez (APM) Se mejora la clase! >_<                                                                                         seleccion de horario y tipo de problema       
 *********************************************************************************/
 public with sharing class CasoAsignaPrioridad {
     
     Set<Id> AsignaPrioridad     = new Set<Id>();
     Set<Id> tiendaPOS           = new Set<Id>();
-    String  Area;
+    
     public void asignaPrioridad(Set<Id> AsignaPrioridad,Set<Id> tiendaPOS){
         
-      this.AsignaPrioridad    = AsignaPrioridad;
-      this.tiendaPOS          = tiendaPOS;
+        this.AsignaPrioridad    = AsignaPrioridad;
+        this.tiendaPOS          = tiendaPOS;
         
-      //Declaración de variables 
-      Map<id,Tienda__c>          tiendasMap          = new Map<id,Tienda__c>();
-      List<Case>                 casos               = new List<Case>();
-      List<Tienda__c>            tiendas             = new List<Tienda__c>();
-      List<Tipos_de_problema__c> problemas           = new List<Tipos_de_problema__c>();
-      List<Case>                 actualizaPrioridad  = new List<Case>();
-      //Se crean consultas cuando la clase se ejecute por una clase de test
-      if(Test.isRunningTest()){
-        casos     = ([select Id, TipoProblema__c, Priority, Clasificacion__c, NoTienda__c, PointOfSales__c , Area_Asignacion__c, RecordType.Name from Case where Id=:AsignaPrioridad]);
-        problemas = ([select Id, Tipo_de_producto__c, Tipo_de_problema__c, Categoria__c, Prioridad__c, POS__c, Area__c from Tipos_de_problema__c]);
-        tiendas   = ([Select Id, POS__c, Zona_GR__c, name from Tienda__c where id =: tiendaPOS]);
-        Area      = 'CAT';
-      }
-      else{
-        casos     = ([select Id, TipoProblema__c, Priority, Clasificacion__c, NoTienda__c, PointOfSales__c , Area_Asignacion__c, RecordType.Name from Case where Id=:AsignaPrioridad]);
-        problemas = ([select Id, Tipo_de_problema__c, Categoria__c, Prioridad__c, POS__c, Area__c from Tipos_de_problema__c]);
-        tiendas   = ([Select Id, POS__c, Zona_GR__c,name from Tienda__c where id =: tiendaPOS]);
-        Area      = ([select Area__c from User where id =: UserInfo.getUserId()].Area__c);
-      }
-      //Recorremos la lista de tiendas y las agregamos a un mapa para posteriormente hacer la asignación de POS
-      for(Tienda__c td : tiendas){
-        tiendasMap.put(td.id,td);
-      }
-      //Se recorren todos los casos en ejecucion y se les Asigna el POS, en caso de ya tener un POS no entra a la asignación
-      if(casos.size()>0){
-        for(Case cs : casos){
-          if(cs.PointOfSales__c == null || cs.PointOfSales__c == ''){
-              //se valida que el POS de la tienda no este vacio si es asi marca error
-              if( tiendasMap.get(cs.NoTienda__c).POS__c == null || tiendasMap.get(cs.NoTienda__c).POS__c == '' ){
-                  system.assertEquals(null,'--NO ES POSIBLE REGISTRAR UN CASO A UNA TIENDA SIN POS. ES NECESARIO CONTACTAR A SU ADMINISTRADOR LOCAL.--');
-              }else{
-                  if(cs.PointOfSales__c == null || cs.PointOfSales__c == ''){
-                      cs.PointOfSales__c = tiendasMap.get(cs.NoTienda__c).POS__c;
-                  }
-              }
-              //se valida que la Zona de la tienda no este vacio si es asi marca error
-              if(tiendasMap.get(cs.NoTienda__c).Zona_GR__c == null || tiendasMap.get(cs.NoTienda__c).Zona_GR__c == ''){
-                  system.assertEquals(null,'--NO ES POSIBLE REGISTRAR UN CASO A UNA TIENDA SIN ZONA GR. ES NECESARIO CONTACTAR A SU ADMINISTRADOR LOCAL.--');
-              }
-          }
-          for(Tipos_de_problema__c tp : problemas){
-            if(cs.TipoProblema__c == tp.Id){
-              if(tp.Area__c != 'Color Center'){
-                if(cs.PointOfSales__c != tp.POS__c){
-                  System.assertEquals(null,'--EL TIPO DE PROBLEMA NO CORRESPONDE AL SISTEMA DEL POS DE LA TIENDA--');
-                }
-                else{
-                    cs.Area_Asignacion__c = Area;
-                    cs.Priority = tp.Prioridad__c;
-                    cs.Clasificacion__c = tp.Categoria__c;
-                    actualizaPrioridad.add(cs);
-                }
-              }else{
-                System.assertEquals(null,'--EL TIPO DE PROBLEMA NO CORRESPONDE AL SISTEMA PLEXUS--');
-              }
+           //Declaración de variables 
+           Map<id,Tienda__c>                 tiendasMap             = new Map<id,Tienda__c>();
+           List<Case>                                casos                      = new List<Case>();
+           List<Tienda__c>                       tiendas                    = new List<Tienda__c>();
+           List<Tipos_de_problema__c>  problemas            = new List<Tipos_de_problema__c>();
+           Set<Id>                                   idTiendas              = new Set<Id>();
+           List<Case>                                updateCasos            = new List<Case>();
+           List<Case>                                actualizaPrioridad  = new List<Case>();
+           //Se crean consultas cuando la clase se ejecute por una clase de test
+           if(Test.isRunningTest()){
+                casos           = ([select Id, TipoProblema__c, Priority, Clasificacion__c, NoTienda__c, PointOfSales__c , Area_Asignacion__c from Case where Id=:AsignaPrioridad]);
+                problemas   = ([select Id, Tipo_de_producto__c, Tipo_de_problema__c, Categoria__c, Prioridad__c, POS__c from Tipos_de_problema__c]);
+                tiendas     = ([Select POS__c, Zona_GR__c, name from Tienda__c where id =: tiendaPOS]);
             }
-          }
-        }// fin de for(Case cs : casos)
-        // se actualizan casos con prioridad y clasificacion 
-        if(actualizaPrioridad.size()>0){update actualizaPrioridad;}
-      }// fin if(casos.size()>0)
-    }// fin metodo asignaPrioridad
- public void asignaPrioridadColorCenter(Set<Id> AsignaPrioridad,Set<Id> tiendaPOS){
-        
-      this.AsignaPrioridad    = AsignaPrioridad;
-      this.tiendaPOS          = tiendaPOS;
-        
-      //Declaración de variables 
-      Map<id,Tienda__c>          tiendasMap          = new Map<id,Tienda__c>();
-      List<Case>                 casos               = new List<Case>();
-      List<Tienda__c>            tiendas             = new List<Tienda__c>();
-      List<Tipos_de_problema__c> problemas           = new List<Tipos_de_problema__c>();
-      List<Case>                 actualizaPrioridad  = new List<Case>();
-      //Se crean consultas cuando la clase se ejecute por una clase de test
-      if(Test.isRunningTest()){
-        casos     = ([select Id, Priority, Clasificacion__c, TipoProblema__c, NoTienda__c , TipoRegistro__c, TipoReporte_CC__c, ZonaColorCenter__c, RegionColorCenter_CC__c from Case where Id=:AsignaPrioridad]);
-        problemas = ([select Id, Prioridad__c, Area__c, Categoria__c from Tipos_de_problema__c]);
-        tiendas   = ([Select Id, RegionColorCenter__c, ZonaColorCenter_CC__c, name from Tienda__c where id =: tiendaPOS]);
-        Area      = 'CAT';
-      }
-      else{
-        casos     = ([select Id, Priority, Clasificacion__c, TipoProblema__c, NoTienda__c , TipoRegistro__c, TipoReporte_CC__c, ZonaColorCenter__c, RegionColorCenter_CC__c from Case where Id=:AsignaPrioridad]);
-        problemas = ([select Id, Prioridad__c, Area__c, Categoria__c from Tipos_de_problema__c]);
-        tiendas   = ([Select Id, RegionColorCenter__c, ZonaColorCenter_CC__c, name from Tienda__c where id =: tiendaPOS]);
-        Area      = ([select Area__c from User where id =: UserInfo.getUserId()].Area__c);
-      }
-      //Recorremos la lista de tiendas obteniendo la zona y region para posteriormente validar el caso
-      for(Tienda__c td : tiendas){
-        tiendasMap.put(td.id,td);
-      }
-      //Se recorren todos los casos en ejecucion para validar que la tienda contenga zona y region
-      if(casos.size()>0){
-        for(Case cs : casos){
-          //system.assertEquals(null,'Zona: '+cs.ZonaColorCenter__c+' // Region // '+cs.RegionColorCenter_CC__c);
-          if(tiendasMap.get(cs.NoTienda__c).ZonaColorCenter_CC__c == null || tiendasMap.get(cs.NoTienda__c).ZonaColorCenter_CC__c == ''){
-            system.assertEquals(null,'--NO ES POSIBLE REGISTRAR UN CASO A UNA TIENDA SIN ZONA COLOR CENTER. ES NECESARIO CONTACTAR A SU ADMINISTRADOR LOCAL.--');
-          }
-          if(tiendasMap.get(cs.NoTienda__c).RegionColorCenter__c == null || tiendasMap.get(cs.NoTienda__c).RegionColorCenter__c == ''){
-            system.assertEquals(null,'--NO ES POSIBLE REGISTRAR UN CASO A UNA TIENDA SIN REGIÓN COLOR CENTER. ES NECESARIO CONTACTAR A SU ADMINISTRADOR LOCAL.--');
-          }
-          //Se valida que el tipo de problema corresponda a Color Center
-          for(Tipos_de_problema__c tp : problemas){
-            if(cs.TipoProblema__c == tp.Id){
-              if(cs.TipoRegistro__c != tp.Area__c){
-                System.assertEquals(null,'--EL TIPO DE PROBLEMA NO CORRESPONDE AL SISTEMA COLOR CENTER--');
-              }else{
-                cs.Priority = tp.Prioridad__c;
-                cs.Area_Asignacion__c = Area;
-                cs.Clasificacion__c = tp.Categoria__c;
-                actualizaPrioridad.add(cs);
-              }
-            }
-          }
-        }// fin de for(Case cs : casos)
-        // se actualizan casos con prioridad y clasificacion 
-        if(actualizaPrioridad.size()>0){update actualizaPrioridad;}
-      }// fin if(casos.size()>0)
-    }// fin metodo asignaPrioridad
-   
-
-}// fin de clase
+             else{
+                casos           = ([select Id, TipoProblema__c, Priority, Clasificacion__c, NoTienda__c, PointOfSales__c , Area_Asignacion__c from Case where Id=:AsignaPrioridad]);
+                problemas   = ([select Id, Tipo_de_problema__c, Categoria__c, Prioridad__c, POS__c from Tipos_de_problema__c]);
+                tiendas     = ([Select POS__c, Zona_GR__c,name from Tienda__c where id =: tiendaPOS]);
+             }
+             //Recorremos la lista de tiendas y las agregamos a un mapa para posteriormente hacer la asignación de POS
+             for(Tienda__c td : tiendas){
+                tiendasMap.put(td.id,td);
+             }
+           //Se recorren todos los casos en ejecucion y se les Asigna el POS, en caso de ya tener un POS no entra a la asignación
+           if(casos.size()>0){
+                   for(Case cs : casos){
+                    if(cs.PointOfSales__c == null || cs.PointOfSales__c == ''){
+                        if( tiendasMap.get(cs.NoTienda__c).POS__c == null || tiendasMap.get(cs.NoTienda__c).POS__c == '' ){
+                            system.assertEquals(null,'--NO ES POSIBLE REGISTRAR UN CASO A UNA TIENDA SIN POS. ES NECESARIO CONTACTAR A SU ADMINISTRADOR LOCAL.--');
+                        }else{
+                            if(cs.PointOfSales__c == null || cs.PointOfSales__c == ''){
+                                cs.PointOfSales__c = tiendasMap.get(cs.NoTienda__c).POS__c;
+                            }
+                        }
+                        if(tiendasMap.get(cs.NoTienda__c).Zona_GR__c == null || tiendasMap.get(cs.NoTienda__c).Zona_GR__c == ''){
+                            system.assertEquals(null,'--NO ES POSIBLE REGISTRAR UN CASO A UNA TIENDA SIN ZONA GR. ES NECESARIO CONTACTAR A SU ADMINISTRADOR LOCAL.--');
+                        }
+                    }
+                    for(Tipos_de_problema__c tp : problemas){   
+                        if(cs.TipoProblema__c == tp.Id){
+                            if(cs.PointOfSales__c != tp.POS__c){System.assertEquals(null,'--EL TIPO DE PROBLEMA NO CORRESPONDE AL SISTEMA DEL POS DE LA TIENDA--');}
+                            else{
+                                cs.Priority = tp.Prioridad__c;
+                                cs.Clasificacion__c = tp.Categoria__c;
+                                actualizaPrioridad.add(cs);
+                            }
+                        }
+                    }
+                    }if(actualizaPrioridad.size()>0){update actualizaPrioridad;}
+           }
+    }
+}
