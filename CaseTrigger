@@ -1,0 +1,288 @@
+/********************************************************************************
+*   Autor:                  Alejandro Paulino                                   *
+*   Proyecto:               Plexus                                              *
+*   Descripción:            Este trigger solo funciona para aquellos caso cuyo 
+                            tipo de registro es Incidencia Zero Pendientes.
+                            Clases para la asignacion de Horarios a Casos       *
+*                                                                               *   
+*   Cambios (Versiones)                                                         *
+*   --------------------------------------------------------------------------  *
+*   No.     Fecha               Autor                   Descripción             *
+*   ------  ----------  ----------------------      --------------------------- *
+*   1.0     30-11-2016   Alejandro Paulino(APM)          Creación Trigger       *
+*   2.0     30-11-2016   Eduardo Godinez Loza(EGL)       Modificación Trigger
+*   3.0     20-02-2018   Alejandro Paulino (APM)         Se elimina código Zero *
+*                                                        pendientes
+*********************************************************************************/
+trigger CaseTrigger on Case (after update, after insert) {
+    Case oValidacion = Trigger.new.get(0);
+   
+    /*CÓDGIO ZERO PENDIENTES ELIMINADO (APM)*/
+    
+    //Desarrollo para Asignación de horarios
+         if(Trigger.isAfter){
+               //set que servira para almacenamiento de casos por medio del ID
+                Set<Id> IdCaso = new Set<Id>(); 
+                Set<Id> AsignaPrioridad = new Set<Id>();
+                Set<Id> ActualizaD = new Set<Id>();
+                Set<Id> duplicarCaso = new Set<Id>();
+                Set<Id> padreCasoCerrado = new Set<Id>();
+                Set<Id> padreCasoReincidencia = new Set<Id>();
+                Set<Id> tiendaPOS = new Set<Id>();
+                Set<Id> camposVacios = new Set<Id>();
+                Boolean MultiplesAcciones = false;
+            if(trigger.isInsert){
+                    //Obtenemos registros nuevos
+                    for(Case oCaseNew : Trigger.new){
+                        if(oCaseNew.TipoRegistro__c == 'Plexus'){
+                            camposVacios.add(oCaseNew.id);
+                            //if(oCaseNew.NoTienda__r.POS__c == null){oCaseNew.addError(' La tienda no tiene POS');}
+                            if(oCaseNew.ParentId != null){
+                                //se coloca Reincidencia == false para que no se dupliquen las actividades y acciones 
+                                if(oCaseNew.isClone()){
+                                    duplicarCaso.add(oCaseNew.Id);
+                                    if(oCaseNew.Multiples_Acciones__c == true){
+                                        MultiplesAcciones = true;
+                                    }
+                                }
+                            }   
+                             AsignaPrioridad.add(OCaseNew.Id);
+                             tiendaPOS.add(OCaseNew.NoTienda__c);
+                             IdCaso.add(OCaseNew.Id);
+                        }     
+                    }
+                    if(duplicarCaso.size()>0){
+                        List<Actividades_Plexus__c> actividadNueva = new List<Actividades_Plexus__c>();
+                        set<id> casoPadre = new set<id>(); 
+                        set<id> actividadPadre = new set<id>(); 
+                        String idRegistro;
+                        //Obtenemos el registro afectado
+                        List<Case> casoDup = new List<Case>([Select id, parentId from Case where id=: duplicarCaso]);
+                        //Almacenamos el Id del caso Padre
+                        for(Case cs: casoDup){ casoPadre.add(cs.ParentId);}
+                        //Obtenemos el Id y el campo de Multiples Acciones del caso padre que nos ayudara a la creaciones de acciones
+                        List<Case> casoMA = new List<Case>([Select Id, Multiples_Acciones__c  from Case where id=: casoPadre]);
+                        
+                        //Obtenemos todas las activididades relacionadas al caso padre
+                        List<Actividades_Plexus__c> actividadDup = new List<Actividades_Plexus__c>([select Id, OwnerId, Clasificacion_Actividad__c, Horario_Plexus__c, Prioridad_actividad__c, POS__c, ACTCOD__c, area__c, TipoProblema__c, Tramo_de_descripcion_actividad__c,
+                        Fecha_Hora_del_evento__c,Pasos_evento__c, Resultado_esperado__c, estatus__c, Numero_de_Caso__c from Actividades_Plexus__c where Numero_de_Caso__c=:casoPadre and estatus__c != 'Rechazado']);
+                        //Almacenamos el id de la actividad
+                        for(Actividades_Plexus__c ac : actividadDup){actividadPadre.add(ac.Id);}
+                        //System.assertEquals(null,'SI ES DUPLICADO'+casoMA);
+                        //Recorremos las actividades y se empieza la creación de nuevas actividades
+                        if(actividadDup.size()>0){
+                            for(Case c : casoDup){
+                                for(Actividades_Plexus__c act : actividadDup){
+                                
+                                    if(c.ParentId == act.Numero_de_Caso__c){
+                                        
+                                        Actividades_Plexus__c actividad = new Actividades_Plexus__c();
+                                        if(MultiplesAcciones == false){
+                                            actividad.estatus__c = 'Asignado';
+                                        }else{
+                                            actividad.estatus__c = act.estatus__c;
+                                            actividad.OwnerId = act.OwnerId; 
+                                        }
+                                        actividad.Numero_de_Caso__c = c.Id;
+                                        actividad.Clasificacion_Actividad__c = act.Clasificacion_Actividad__c;
+                                        actividad.Horario_Plexus__c = act.Horario_Plexus__c;
+                                        actividad.Prioridad_actividad__c = act.Prioridad_actividad__c;
+                                        actividad.area__c = act.area__c;
+                                        actividad.TipoProblema__c= act.TipoProblema__c;
+                                        actividad.Tramo_de_descripcion_actividad__c = act.Tramo_de_descripcion_actividad__c;
+                                        actividad.Fecha_Hora_del_evento__c = act.Fecha_Hora_del_evento__c;
+                                        actividad.Pasos_evento__c = act.Pasos_evento__c;
+                                        actividad.Resultado_esperado__c = act.Resultado_esperado__c;
+                                        actividad.ACTCOD__c = true;
+                                        //system.assertEquals(null,'Error :'+actividad);
+                                        
+                                            try{
+                                                Database.saveresult sr = database.insert(actividad);
+                                            if(sr.isSuccess()){
+                                                //Guardamos el id de la actividad en caso de que esta tenga un estatus Resulto
+                                                if(act.estatus__c=='Resuelto'){
+                                                //system.assertEquals(null,'Error'+act);
+                                                idRegistro = [select Id from Actividades_Plexus__c where Id =: sr.Id limit 1].Id;
+                                                //system.assertEquals(null,'Error'+idRegistro );
+                                                }
+                                            }
+                                            }catch(Exception e){
+                                                system.debug(e.getMessage());
+                                                //ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.Error,'Error al Insertar')); 
+                                                system.assertEquals(null,'Error: '+e.getMessage());  
+                                            }
+                                    }
+                                }
+                            }
+                        }
+                        if(camposVacios.size()>0){
+                            List<Case> vaciarCampos = new List<Case>([select id, Multiples_Acciones__c, TiempoRespuesta__c, TiempoReincidencia__c, NoReincidencias__c from Case where id=: camposVacios]);
+                            List<Case> vaciarCamposUpdate = new List<Case>();
+                            for(Case cs : vaciarCampos){
+                                cs.Multiples_Acciones__c = false;
+                                cs.TiempoRespuesta__c = 0;
+                                cs.TiempoReincidencia__c = 0;
+                                cs.NoReincidencias__c = 0;
+                                vaciarCamposUpdate.add(cs);
+                            }if(vaciarCamposUpdate.size()>0){ update vaciarCamposUpdate;}
+
+                        }
+                        //Creación de acciones
+                        if(casoMA.size()>0){
+                            for(Case ca : casoMA){
+                            //system.assertEquals(null,'Error : '+casoMA);
+                                //Validamos que la casilla de multiples acciones del caso padre este activa
+                                if(ca.Multiples_Acciones__c == true){
+                                    if(idRegistro != null || idRegistro != ''){
+                                        List<ComentariosActividad__c> accion = new List<ComentariosActividad__c>([select id, Comentarios__c, ownerId, RecordTypeId,Actividad__c from ComentariosActividad__c where Actividad__c =: actividadPadre]);
+                                        List<ComentariosActividad__c> acciones = new List<ComentariosActividad__c>();
+                                        if(accion.size()>0){
+                                            for(ComentariosActividad__c ac : accion){
+                                                ComentariosActividad__c comentario = new ComentariosActividad__c();
+                                                comentario.Comentarios__c = ac.Comentarios__c;
+                                                comentario.ownerId = ac.ownerId;
+                                                comentario.RecordTypeId = ac.RecordTypeId;
+                                                comentario.Actividad__c = idRegistro;
+                                                acciones.add(comentario);
+                                            }if(acciones.size()>0){insert acciones;}
+                                        }
+                                    }
+                                  }
+                            }
+                        }
+                        //System.assertEquals(null,'SI ES DUPLICADO');
+                    }
+                    if(AsignaPrioridad.size()>0){
+                        try{
+                            CasoAsignaPrioridad asigna = new CasoAsignaPrioridad();
+                                asigna.asignaPrioridad(AsignaPrioridad, tiendaPOS);
+                         }catch(Exception e){System.debug('error'+e);
+                                    system.assertEquals(null,e.getMessage()+'//Linea//'+e.getStackTraceString());
+                         }
+                    }
+                    if(IdCaso.size()>0){
+                        //creamos una instancia hacia horarios para ejecutar el metodo del caluculo
+                        Horarios_Plexus_cls eCalculo = new Horarios_Plexus_cls();
+                            eCalculo.calcular(IdCaso);
+                    }
+            }
+            if(trigger.isUpdate){ 
+                Set<Id> identificarHijos = new set<Id>();
+                Set<Id> cerrarCasoPadre = new set<Id>();
+                Set<Id> actualizaTiempo = new set<Id>();
+                Set<Id> casoNoReincidente = new set<Id>();
+                Set<Id> ReincidenciaC = new set<Id>();
+                Set<Id> ReincidenciaCierre = new set<Id>();
+                    //Se ejecutara este pedazo de código cuando uno de los valores como "Prioridad" cambie
+                    for(Case oCaseNew : Trigger.new){
+                     if(oCaseNew.TipoRegistro__c == 'Plexus'){
+                        if(oCaseNew.TipoProblema__c != Trigger.oldMap.get(oCaseNew.Id).TipoProblema__c){
+                            AsignaPrioridad.add(OCaseNew.Id);
+                            tiendaPOS.add(OCaseNew.NoTienda__c);
+                        }
+                        if(oCaseNew.Clasificacion__c != Trigger.oldMap.get(oCaseNew.Id).Clasificacion__c || 
+                            oCaseNew.Area_Asignacion__c != Trigger.oldMap.get(oCaseNew.Id).Area_Asignacion__c ||
+                            oCaseNew.Priority != Trigger.oldMap.get(oCaseNew.Id).Priority){
+                                IdCaso.add(OCaseNew.Id);
+                        } 
+                        //Si cambia el tramo de descripción actualiza sus actividades tambien
+                        if(oCaseNew.TramoDescripcion__c != Trigger.oldMap.get(oCaseNew.Id).TramoDescripcion__c){
+                            ActualizaD.add(OCaseNew.Id);
+                        } 
+                        if(oCaseNew.Status != Trigger.oldMap.get(oCaseNew.Id).Status && oCaseNew.status=='Cerrado'){
+                            identificarHijos.add(OCaseNew.Id);
+                        }
+                        //Si un caso pasa de Etapa Cerrado  Reincidencia se crear un registro en historico para llevar el conteo de tiempo reincidente
+                        if(oCaseNew.Status != Trigger.oldMap.get(oCaseNew.Id).Status && oCaseNew.status=='Reincidencia' && Trigger.oldMap.get(oCaseNew.Id).Status == 'Cerrado'){
+                            ReincidenciaC.add(OCaseNew.Id);
+                        }
+                        //Si la Etapa pasa de Reincidencia a Cerrado en el campo de fecha de cierre lo llenamos con la fecha actual obtenida desde el sistema
+                        if(oCaseNew.Status != Trigger.oldMap.get(oCaseNew.Id).Status && oCaseNew.status=='Cerrado' && Trigger.oldMap.get(oCaseNew.Id).Status == 'Reincidencia'){
+                            ReincidenciaCierre.add(OCaseNew.Id);
+                        }
+                      }
+                    } 
+                    if(ReincidenciaC.size()>0){
+                        List<Historico_Reincidencia__c> nuevoHistorico = new List<Historico_Reincidencia__c>();
+                        List<Case> casosUpdate = new List<Case>();
+                        List<Case> casos = new List<Case>([Select id, status, Area_Asignacion__c, Validador__c, Soluciondelcaso__c from Case where id =: ReincidenciaC]);
+                        if(casos.size()>0){
+                            for(Case caso : casos){
+                            Historico_Reincidencia__c nHistorico =  new Historico_Reincidencia__c ();
+                            nHistorico.Caso__c = caso.id;
+                            nHistorico.Area__c = caso.Area_Asignacion__c;
+                            nHistorico.FechaHoraApertura__c = Datetime.Now();
+                            nuevoHistorico.add(nHistorico);
+                            caso.Validador__c = '';
+                            caso.Soluciondelcaso__c = '';
+                            casosUpdate.add(caso);
+                            }if(nuevoHistorico.size()>0){insert nuevoHistorico;}if(casosUpdate.size()>0){update casosUpdate;}
+                        }
+                        
+                    }
+                    if(ReincidenciaCierre.size()>0){
+                        List<Historico_Reincidencia__c> historico = new List<Historico_Reincidencia__c>([select id, FechaHoraCierre__c from Historico_Reincidencia__c where Caso__c=: ReincidenciaCierre and FechaHoraCierre__c =: null]);
+                        List<Historico_Reincidencia__c> actualizaHistorico = new List<Historico_Reincidencia__c>();
+                        if(historico.size()>0){
+                            for(Historico_Reincidencia__c fechaCierre : historico){
+                                fechaCierre.FechaHoraCierre__c = Datetime.Now();
+                                actualizaHistorico.add(fechaCierre);
+                            }if(actualizaHistorico.size()>0){update actualizaHistorico;}
+                        }
+                    }
+                    //Validamos si el caso padre tiene hijos aun en etapas abiertas
+                    if(identificarHijos.size()>0){
+                        List<Case> casosHijos = new List<Case>([select id, parentId, status from Case where parentId =: identificarHijos and status IN('Abierto','Escalado','Reincidencia')]);
+                        List<Actividades_Plexus__c> actAbiertas = new List<Actividades_Plexus__c>([select id, Estatus__c from Actividades_Plexus__c where Numero_de_Caso__c=:identificarHijos and Estatus__c IN('Asignado','En proceso','Reincidencia')]);
+                        if(casosHijos.size()>0){
+                            
+                            System.assertEquals(null,'Verifica que los casos relacionados estan cerrados');
+                        }
+                        if(actAbiertas.size()>0){
+                            System.assertEquals(null,'Verifica que las Actividades relacionadas estan Resueltas o Rechazadas');
+                        }
+                    }
+                    //Actualiza la descripción del padre al hijo
+                    if(ActualizaD.size()>0){
+                        List<Actividades_Plexus__c> actividadD = new List<Actividades_Plexus__c>();
+                        
+                        List<Actividades_Plexus__c> act = new List<Actividades_Plexus__c>([Select Id, Tramo_de_descripcion_del__c, Numero_de_Caso__c from Actividades_Plexus__c where Numero_de_Caso__c=:ActualizaD]);
+                        List<Case> casos = new List<Case>([select Id, status, TramoDescripcion__c, LastModifiedDate, LastModifiedBy.Name from Case where Id =: ActualizaD and status IN('Abierto','Escalado')]);        
+                                
+                                if(act.size()>0){
+                                    for(Actividades_Plexus__c a: act){
+                                        for(Case c: casos){
+                                            if(a.Numero_de_Caso__c == c.Id){ 
+                                                a.Tramo_de_descripcion_del__c = c.TramoDescripcion__c;
+                                                actividadD.add(a);
+                                            }
+                                        }
+                                    }if(actividadD.size()>0){update actividadD;}
+                                }
+                    }
+                    if(AsignaPrioridad.size()>0){
+                        CasoAsignaPrioridad asigna = new CasoAsignaPrioridad();
+                            asigna.asignaPrioridad(AsignaPrioridad,tiendaPOS);
+                    }
+                     if(IdCaso.size()>0){
+                    //Obtenemos todas las actividades relacionadas a el caso afectado para actualizar su horario tambien
+                    List<Actividades_Plexus__c> actividades = new List<Actividades_Plexus__c>([select Id,Numero_de_Caso__c from Actividades_Plexus__c where Numero_de_Caso__c =: IdCaso]);
+                    
+                        set<Id> IdActividad = new set<Id>();
+                            if(actividades.size()>0){
+                                for(Actividades_Plexus__c ac : actividades){
+                                    IdActividad.add(ac.Id);
+                                }
+                            }
+                    //Asignacion de horario a casos 
+                    Horarios_Plexus_cls eCalculo = new Horarios_Plexus_cls();
+                    
+                        eCalculo.calcular(IdCaso);
+                    //Asignacion de horario a actividades
+                    Horarios_Plexus_Actividades calculo = new Horarios_Plexus_Actividades();
+                        calculo.calcular(IdActividad);
+                    }
+                    //se Ejecutara cuando a un caso se le cambio el tipo de problema
+                }
+            }
+}
