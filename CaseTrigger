@@ -13,15 +13,17 @@
 *   2.0     30-11-2016   Eduardo Godinez Loza(EGL)       Modificación Trigger
 *   3.0     20-02-2018   Alejandro Paulino (APM)         Se elimina código Zero *
 *                                                        pendientes
+*   4.0     13/08/2018   Eduardo Godinez Loza(EGL)       Se agrega proceso color center
 *********************************************************************************/
 trigger CaseTrigger on Case (after update, after insert) {
     Case oValidacion = Trigger.new.get(0);
    
-    /*CÓDGIO ZERO PENDIENTES ELIMINADO (APM)*/
+  /*CÓDGIO ZERO PENDIENTES ELIMINADO (APM)*/
     
     //Desarrollo para Asignación de horarios
-         if(Trigger.isAfter){
+        if(Trigger.isAfter){
                //set que servira para almacenamiento de casos por medio del ID
+                Set<Id> idCasoTiempoCC = new Set<Id>(); //Crear registro para medir el tiempo Color Center
                 Set<Id> IdCaso = new Set<Id>(); 
                 Set<Id> AsignaPrioridad = new Set<Id>();
                 Set<Id> ActualizaD = new Set<Id>();
@@ -31,6 +33,10 @@ trigger CaseTrigger on Case (after update, after insert) {
                 Set<Id> tiendaPOS = new Set<Id>();
                 Set<Id> camposVacios = new Set<Id>();
                 Boolean MultiplesAcciones = false;
+                //Variables Color Center
+                Set<Id> asignaPrioridadCC = new Set<Id>();
+                Set<Id> tdZonaCC = new Set<Id>();
+                Set<Id> idCasoInsert = new Set<Id>();
             if(trigger.isInsert){
                     //Obtenemos registros nuevos
                     for(Case oCaseNew : Trigger.new){
@@ -46,11 +52,16 @@ trigger CaseTrigger on Case (after update, after insert) {
                                     }
                                 }
                             }   
-                             AsignaPrioridad.add(OCaseNew.Id);
-                             tiendaPOS.add(OCaseNew.NoTienda__c);
-                             IdCaso.add(OCaseNew.Id);
-                        }     
-                    }
+                            AsignaPrioridad.add(oCaseNew.Id);
+                            tiendaPOS.add(oCaseNew.NoTienda__c);
+                            IdCaso.add(oCaseNew.Id);
+                        }
+                        if(oCaseNew.TipoRegistro__c == 'Color Center'){
+                            asignaPrioridadCC.add(oCaseNew.Id); //validar area Color Center en Tipo de problema y Horario
+                            tdZonaCC.add(oCaseNew.NoTienda__c);//validar zona, region color center
+                            IdCaso.add(oCaseNew.Id);
+                        }   
+                    }//fin for(Case oCaseNew : Trigger.new)
                     if(duplicarCaso.size()>0){
                         List<Actividades_Plexus__c> actividadNueva = new List<Actividades_Plexus__c>();
                         set<id> casoPadre = new set<id>(); 
@@ -151,72 +162,106 @@ trigger CaseTrigger on Case (after update, after insert) {
                             }
                         }
                         //System.assertEquals(null,'SI ES DUPLICADO');
-                    }
+                    }//fin if(duplicarCaso.size()>0)
                     if(AsignaPrioridad.size()>0){
                         try{
                             CasoAsignaPrioridad asigna = new CasoAsignaPrioridad();
                                 asigna.asignaPrioridad(AsignaPrioridad, tiendaPOS);
-                         }catch(Exception e){System.debug('error'+e);
+                        }catch(Exception e){System.debug('error'+e);
                                     system.assertEquals(null,e.getMessage()+'//Linea//'+e.getStackTraceString());
-                         }
+                        }
+                    }//fin if(AsignaPrioridad.size()>0)
+                    if(asignaPrioridadCC.size()>0){
+                        //Asignacion de prioridades y validacion de Zona y Region en la tienda
+                        try{
+                            CasoAsignaPrioridad asigna = new CasoAsignaPrioridad();
+                                asigna.asignaPrioridadColorCenter(asignaPrioridadCC, tdZonaCC);
+                        }catch(Exception e){System.debug('error'+e);
+                                system.assertEquals(null,e.getMessage()+'//Linea//'+e.getStackTraceString());
+                        }
+                        CreaTiempoCC creaTiempo = new CreaTiempoCC();
+                            creaTiempo.creaTiempoCC(asignaPrioridadCC);
                     }
                     if(IdCaso.size()>0){
                         //creamos una instancia hacia horarios para ejecutar el metodo del caluculo
                         Horarios_Plexus_cls eCalculo = new Horarios_Plexus_cls();
                             eCalculo.calcular(IdCaso);
-                    }
-            }
-            if(trigger.isUpdate){ 
+                    }// fin if(IdCaso.size()>0)
+            }//Fin Insert
+            if(trigger.isUpdate){
                 Set<Id> identificarHijos = new set<Id>();
                 Set<Id> cerrarCasoPadre = new set<Id>();
                 Set<Id> actualizaTiempo = new set<Id>();
                 Set<Id> casoNoReincidente = new set<Id>();
+                Set<Id> tiempoCCEscalado = new set<Id>();
+                Set<Id> cerrarTareaCC = new set<Id>();
                 Set<Id> ReincidenciaC = new set<Id>();
                 Set<Id> ReincidenciaCierre = new set<Id>();
                     //Se ejecutara este pedazo de código cuando uno de los valores como "Prioridad" cambie
                     for(Case oCaseNew : Trigger.new){
-                     if(oCaseNew.TipoRegistro__c == 'Plexus'){
-                        if(oCaseNew.TipoProblema__c != Trigger.oldMap.get(oCaseNew.Id).TipoProblema__c){
-                            AsignaPrioridad.add(OCaseNew.Id);
-                            tiendaPOS.add(OCaseNew.NoTienda__c);
+                        if(oCaseNew.TipoRegistro__c == 'Plexus' || oCaseNew.TipoRegistro__c == 'Color Center'){
+                            //Si cambia el tramo de descripción actualiza sus actividades tambien
+                            if(oCaseNew.TramoDescripcion__c != Trigger.oldMap.get(oCaseNew.Id).TramoDescripcion__c){
+                                ActualizaD.add(OCaseNew.Id);
+                            } 
+                            if(oCaseNew.Status != Trigger.oldMap.get(oCaseNew.Id).Status && oCaseNew.status=='Cerrado'){
+                                identificarHijos.add(OCaseNew.Id);
+                            }
+                            //Si un caso pasa de Etapa Cerrado  Reincidencia se crear un registro en historico para llevar el conteo de tiempo reincidente
+                            if(oCaseNew.Status != Trigger.oldMap.get(oCaseNew.Id).Status && oCaseNew.status=='Reincidencia' && Trigger.oldMap.get(oCaseNew.Id).Status == 'Cerrado'){
+                                ReincidenciaC.add(OCaseNew.Id);
+                            }
+                            //Si la Etapa pasa de Reincidencia a Cerrado en el campo de fecha de cierre lo llenamos con la fecha actual obtenida desde el sistema
+                            if(oCaseNew.Status != Trigger.oldMap.get(oCaseNew.Id).Status && oCaseNew.status=='Cerrado' && Trigger.oldMap.get(oCaseNew.Id).Status == 'Reincidencia'){
+                                ReincidenciaCierre.add(OCaseNew.Id);
+                            }
+                            if(oCaseNew.TipoProblema__c != Trigger.oldMap.get(oCaseNew.Id).TipoProblema__c ||
+                                oCaseNew.Area_Asignacion__c != Trigger.oldMap.get(oCaseNew.Id).Area_Asignacion__c){
+                                    IdCaso.add(OCaseNew.Id);
+                            }
                         }
-                        if(oCaseNew.Clasificacion__c != Trigger.oldMap.get(oCaseNew.Id).Clasificacion__c || 
-                            oCaseNew.Area_Asignacion__c != Trigger.oldMap.get(oCaseNew.Id).Area_Asignacion__c ||
-                            oCaseNew.Priority != Trigger.oldMap.get(oCaseNew.Id).Priority){
-                                IdCaso.add(OCaseNew.Id);
-                        } 
-                        //Si cambia el tramo de descripción actualiza sus actividades tambien
-                        if(oCaseNew.TramoDescripcion__c != Trigger.oldMap.get(oCaseNew.Id).TramoDescripcion__c){
-                            ActualizaD.add(OCaseNew.Id);
-                        } 
-                        if(oCaseNew.Status != Trigger.oldMap.get(oCaseNew.Id).Status && oCaseNew.status=='Cerrado'){
-                            identificarHijos.add(OCaseNew.Id);
+                        if(oCaseNew.TipoRegistro__c == 'Plexus'){
+                            if(oCaseNew.TipoProblema__c != Trigger.oldMap.get(oCaseNew.Id).TipoProblema__c){
+                                AsignaPrioridad.add(OCaseNew.Id);
+                                tiendaPOS.add(OCaseNew.NoTienda__c);
+                            }
                         }
-                        //Si un caso pasa de Etapa Cerrado  Reincidencia se crear un registro en historico para llevar el conteo de tiempo reincidente
-                        if(oCaseNew.Status != Trigger.oldMap.get(oCaseNew.Id).Status && oCaseNew.status=='Reincidencia' && Trigger.oldMap.get(oCaseNew.Id).Status == 'Cerrado'){
-                            ReincidenciaC.add(OCaseNew.Id);
+                        if(oCaseNew.TipoRegistro__c == 'Color Center'){
+                            if(oCaseNew.TipoProblema__c != Trigger.oldMap.get(oCaseNew.Id).TipoProblema__c){
+                                asignaPrioridadCC.add(OCaseNew.Id); //validar area Color Center en Tipo de problema y Horario
+                                tdZonaCC.add(OCaseNew.NoTienda__c);//validar zona, region color center
+                            }
+                            if(oCaseNew.Status == 'Cerrado' && oCaseNew.TipoReporte_CC__c == 'Preventivo' && Trigger.oldMap.get(oCaseNew.Id).Status != 'Reincidencia'){
+                                cerrarTareaCC.add(oCaseNew.Id);
+                            }
+                            /*if(oCaseNew.Status == 'Escalado' && Trigger.oldMap.get(oCaseNew.Id).Status == 'Abierto'){
+                                tiempoCCEscalado.add(OCaseNew.Id);
+                            }*/
                         }
-                        //Si la Etapa pasa de Reincidencia a Cerrado en el campo de fecha de cierre lo llenamos con la fecha actual obtenida desde el sistema
-                        if(oCaseNew.Status != Trigger.oldMap.get(oCaseNew.Id).Status && oCaseNew.status=='Cerrado' && Trigger.oldMap.get(oCaseNew.Id).Status == 'Reincidencia'){
-                            ReincidenciaCierre.add(OCaseNew.Id);
-                        }
-                      }
-                    } 
+                    }
+                    //Se creara un nuevo tiempo desde Escalado hasta que cierra y se cierra el tiempo de abierto a escaldo
+                    /*if(tiempoCCEscalado.size()>0){
+                        CreaTiempoCC creaTiempo = new CreaTiempoCC();
+                            creaTiempo.cerrarTiempo(tiempoCCEscalado);
+                            creaTiempo.creaTiempoCC(tiempoCCEscalado);
+                    }*/ 
                     if(ReincidenciaC.size()>0){
                         List<Historico_Reincidencia__c> nuevoHistorico = new List<Historico_Reincidencia__c>();
                         List<Case> casosUpdate = new List<Case>();
-                        List<Case> casos = new List<Case>([Select id, status, Area_Asignacion__c, Validador__c, Soluciondelcaso__c from Case where id =: ReincidenciaC]);
+                        List<Case> casos = new List<Case>([Select id, status, Area_Asignacion__c, Validador__c, Soluciondelcaso__c, TipoRegistro__c from Case where id =: ReincidenciaC]);
                         if(casos.size()>0){
                             for(Case caso : casos){
-                            Historico_Reincidencia__c nHistorico =  new Historico_Reincidencia__c ();
-                            nHistorico.Caso__c = caso.id;
-                            nHistorico.Area__c = caso.Area_Asignacion__c;
-                            nHistorico.FechaHoraApertura__c = Datetime.Now();
-                            nuevoHistorico.add(nHistorico);
-                            caso.Validador__c = '';
-                            caso.Soluciondelcaso__c = '';
-                            casosUpdate.add(caso);
-                            }if(nuevoHistorico.size()>0){insert nuevoHistorico;}if(casosUpdate.size()>0){update casosUpdate;}
+                                Historico_Reincidencia__c nHistorico =  new Historico_Reincidencia__c ();
+                                nHistorico.Caso__c = caso.id;
+                                nHistorico.Area__c = caso.Area_Asignacion__c;
+                                nHistorico.FechaHoraApertura__c = Datetime.Now();
+                                nuevoHistorico.add(nHistorico);
+                                caso.Validador__c = '';
+                                caso.Soluciondelcaso__c = '';
+                                casosUpdate.add(caso);
+                            }
+                            if(nuevoHistorico.size()>0){insert nuevoHistorico;} //Inserta nuevo registro reincidencia
+                            if(casosUpdate.size()>0){update casosUpdate;}
                         }
                         
                     }
@@ -232,22 +277,27 @@ trigger CaseTrigger on Case (after update, after insert) {
                     }
                     //Validamos si el caso padre tiene hijos aun en etapas abiertas
                     if(identificarHijos.size()>0){
-                        List<Case> casosHijos = new List<Case>([select id, parentId, status from Case where parentId =: identificarHijos and status IN('Abierto','Escalado','Reincidencia')]);
+                        List<Case> casosHijos = new List<Case>([select id, TipoRegistro__c, parentId, status from Case where parentId =: identificarHijos and status IN('Abierto','Escalado','Reincidencia')]);
                         List<Actividades_Plexus__c> actAbiertas = new List<Actividades_Plexus__c>([select id, Estatus__c from Actividades_Plexus__c where Numero_de_Caso__c=:identificarHijos and Estatus__c IN('Asignado','En proceso','Reincidencia')]);
+                        //Consulta para obtener tiempos de color center para posteriormente cerrarlos
+                        List<TiemposColorCenter__c> tiempoCC = new List<TiemposColorCenter__c>([select id, FechaFin__c, FechaInicio__c from TiemposColorCenter__c where Caso__c =: ReincidenciaCierre and FechaFin__c =: null]);
+                        List<TiemposColorCenter__c> updateTiempoCC = new List<TiemposColorCenter__c>();
+                        
                         if(casosHijos.size()>0){
-                            
                             System.assertEquals(null,'Verifica que los casos relacionados estan cerrados');
                         }
                         if(actAbiertas.size()>0){
                             System.assertEquals(null,'Verifica que las Actividades relacionadas estan Resueltas o Rechazadas');
                         }
+                        CreaTiempoCC creaTiempo = new CreaTiempoCC();
+                            creaTiempo.cerrarTiempo(identificarHijos);
                     }
                     //Actualiza la descripción del padre al hijo
                     if(ActualizaD.size()>0){
                         List<Actividades_Plexus__c> actividadD = new List<Actividades_Plexus__c>();
                         
                         List<Actividades_Plexus__c> act = new List<Actividades_Plexus__c>([Select Id, Tramo_de_descripcion_del__c, Numero_de_Caso__c from Actividades_Plexus__c where Numero_de_Caso__c=:ActualizaD]);
-                        List<Case> casos = new List<Case>([select Id, status, TramoDescripcion__c, LastModifiedDate, LastModifiedBy.Name from Case where Id =: ActualizaD and status IN('Abierto','Escalado')]);        
+                        List<Case> casos = new List<Case>([select Id, status, TramoDescripcion__c, LastModifiedDate, LastModifiedBy.Name from Case where Id =: ActualizaD and status IN('Abierto','Escalado','Reincidencia')]);        
                                 
                                 if(act.size()>0){
                                     for(Actividades_Plexus__c a: act){
@@ -264,7 +314,16 @@ trigger CaseTrigger on Case (after update, after insert) {
                         CasoAsignaPrioridad asigna = new CasoAsignaPrioridad();
                             asigna.asignaPrioridad(AsignaPrioridad,tiendaPOS);
                     }
-                     if(IdCaso.size()>0){
+                    if(asignaPrioridadCC.size()>0){
+                        //Asignacion de prioridades y validacion de Zona y Region en la tienda
+                        try{
+                            CasoAsignaPrioridad asigna = new CasoAsignaPrioridad();
+                                asigna.asignaPrioridadColorCenter(asignaPrioridadCC, tdZonaCC);
+                        }catch(Exception e){System.debug('error'+e);
+                                system.assertEquals(null,e.getMessage()+'//Linea//'+e.getStackTraceString());
+                        }
+                    }
+                    if(IdCaso.size()>0){
                     //Obtenemos todas las actividades relacionadas a el caso afectado para actualizar su horario tambien
                     List<Actividades_Plexus__c> actividades = new List<Actividades_Plexus__c>([select Id,Numero_de_Caso__c from Actividades_Plexus__c where Numero_de_Caso__c =: IdCaso]);
                     
@@ -276,13 +335,27 @@ trigger CaseTrigger on Case (after update, after insert) {
                             }
                     //Asignacion de horario a casos 
                     Horarios_Plexus_cls eCalculo = new Horarios_Plexus_cls();
-                    
                         eCalculo.calcular(IdCaso);
                     //Asignacion de horario a actividades
                     Horarios_Plexus_Actividades calculo = new Horarios_Plexus_Actividades();
                         calculo.calcular(IdActividad);
+                    }//se Ejecutara cuando a un caso se le cambio el tipo de problema
+                    if(cerrarTareaCC.size()>0){
+                        List<Task> tarea = new List<Task>([select Id, WhatId,Resultadodelcaso__c from Task where WhatId =: cerrarTareaCC]);
+                        List <Case> caso = new List<Case>([select Id, Soluciondelcaso__c from Case where id =: cerrarTareaCC]);
+                        List<Task> tareaUpdate = new List<Task>();
+                        for(Case cs : caso){
+                            for(Task t : tarea){
+                                if(cs.Id == t.WhatId && (cs.Soluciondelcaso__c != null || cs.Soluciondelcaso__c != '')){
+                                    t.Status = 'Completada';
+                                    t.Resultadodelcaso__c = cs.Soluciondelcaso__c;
+                                    tareaUpdate.add(t);
+                                }
+                            }
+                        }
+                        
+                        if(tareaUpdate.size()>0){update tareaUpdate;}
                     }
-                    //se Ejecutara cuando a un caso se le cambio el tipo de problema
-                }
-            }
+            }//fin Update
+        }
 }
