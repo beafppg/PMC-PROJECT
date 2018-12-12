@@ -15,32 +15,41 @@
 ******************************************************************************************/
 public with sharing class Horarios_Plexus_cls {
     
-    set<Id> IdCaso = new set<Id>(); //Guardaremos los Id de los casos a actualizar un horario
-   
+    set<Id> IdCaso = new set<Id>(); //Guardaremos los Id de los casos al actualizar un horario
+   	
+
     //Metodo para realizar la asignacion de Horarios
     public void calcular(Set<Id> IdCaso){
+        System.debug(IdCaso);
         //Igualamos la variable que recibimos con la variable global de la clase
         this.IdCaso = IdCaso;
+        //System.debug(IdCaso);
         List<Horarios_Plexus__c> Hr = new List<Horarios_Plexus__c>();
         //En esta lista se alamacenaran los casos afectados para despues actualizar
         List<Case> UpdateCasos = new List<Case>();
-        //Se hace una consulta a todos tipos de horarios
+        //Se hace una consulta a todos  los tipos de horarios
             if (Test.isRunningTest())Hr = [Select Id, area__c, Prioridad__c, Tipo__c, Zona__c, POS__c, Sistema__c, TipoReporte_CC__c from Horarios_Plexus__c where Activo__c =: true];
             if (!Test.isRunningTest()) Hr = [Select Id, area__c, Prioridad__c, Tipo__c, Zona__c, POS__c, Sistema__c, TipoReporte_CC__c from Horarios_Plexus__c where Activo__c =: true];
+        	//System.debug(Hr);
         //Obtenemos todos los casos para proceder a modificarlos
         List<Case>  casos = new List<Case>();
             if (Test.isRunningTest())casos = ([Select Id, RecordType.Name, Area_Asignacion__c, Priority, Zona_Tienda__c, Clasificacion__c, Horarios_Plexus__c, PointOfSales__c, TipoRegistro__c, TipoReporte_CC__c, ZonaColorCenter__c from Case where Id=:IdCaso]);
             if (!Test.isRunningTest())casos = ([Select Id, RecordType.Name, Area_Asignacion__c, Priority, Zona_Tienda__c, Clasificacion__c, Horarios_Plexus__c, PointOfSales__c, TipoRegistro__c, TipoReporte_CC__c, ZonaColorCenter__c from Case where Id=:IdCaso]);
-            
+            //System.debug(casos);
+        	//System.debug('Me encuentro aqui');
         //Se recorren los casos junto con los horarios donde se encuentren las coincidencias se asigna el horario al caso
         for(Case cs : casos){
             if(cs.RecordType.Name == 'Plexus'){
+                //System.debug('Si entro nivel 1');
                 if(cs.PointOfSales__c == 'Plexus'){
+                    //System.debug('Si entro nivel 2');
                    if(cs.Area_Asignacion__c == 'Soporte' || (cs.Area_Asignacion__c == 'Capa' && cs.Clasificacion__c == 'Solicitud')){
-                        for(Horarios_Plexus__c hora: Hr){
+                       //System.debug('Si entro nivel 3'); 
+                       for(Horarios_Plexus__c hora: Hr){
                         //system.assertEquals(null,'Área: '+hora.area__c+'=='+cs.Area_Asignacion__c+'  Prioridad: '+hora.Prioridad__c +'=='+cs.Priority+'   Zona: '+hora.Zona__c+'=='+cs.Zona_Tienda__c+'   Tipo:'+hora.Tipo__c+'=='+cs.Clasificacion__c);
                             if(hora.area__c == cs.Area_Asignacion__c && hora.Prioridad__c == cs.Priority && hora.Zona__c == cs.Zona_Tienda__c && hora.Tipo__c == cs.Clasificacion__c && hora.POS__c == 'Plexus' && hora.Sistema__c == 'Plexus'){
                                 cs.Horarios_Plexus__c = hora.Id;
+                                //System.debug(cs.Horarios_Plexus__c);
                                     UpdateCasos.add(cs);
                             }
                         }
