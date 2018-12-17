@@ -1,0 +1,17 @@
+/********************************************************************************
+*   Autor:                  Eduardo Godinez (Freeway Premium Outsorcing)        *
+*   Proyecto:               Plexus                                              *
+*   Descripción:            Batch programado para ejecutar tiendas delete que 	*
+*                           elimina las firmas de los concesionarios			*   
+*   Cambios (Versiones)                                                         *
+*   --------------------------------------------------------------------------  *
+*   No.     Fecha               Autor                   Descripción             *
+*   ------  ----------  ----------------------      --------------------------- *
+*   1.0     03-03-2016   Eduardo Godinez Loza(EGL)       Creación Clase Schedule*
+*********************************************************************************/
+global class TiendasDelete_Sch implements Schedulable{
+    global void execute (SchedulableContext sc){
+    	TiendasDelete_Bch batch = new TiendasDelete_Bch();
+    		database.executebatch(batch);
+    }
+}
